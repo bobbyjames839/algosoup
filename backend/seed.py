@@ -66,7 +66,7 @@ for p in patients:
          "status": "scheduled", "scheduled_at": (now + timedelta(days=random.randint(1, 21), hours=random.randint(0, 6))).replace(minute=0, second=0, microsecond=0).isoformat()},
     ]
     messages += [
-        {"patient_id": p["id"], "doctor_id": doctor_id, "sender": "patient", "body": "Hi doctor, my readings have been high after dinner this week. Should I adjust my bolus?"},
+        {"patient_id": p["id"], "doctor_id": doctor_id, "sender": "patient", "body": "Hi doctor, my readings have been high after dinner this week. Should I adjust my bolus?", "is_read": False},
         {"patient_id": p["id"], "doctor_id": doctor_id, "sender": "doctor", "body": "Thanks for letting me know. Let's review at your next appointment; keep logging post-meal readings.", "is_read": True},
     ]
 

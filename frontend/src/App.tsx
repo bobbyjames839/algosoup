@@ -1,13 +1,34 @@
-import { ItemList } from './features/items/ItemList'
+import type { ReactNode } from 'react'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { Banner } from './components/Banner'
+import { Layout } from './components/Layout'
+import { AppointmentsPage } from './pages/AppointmentsPage'
+import { LoginPage } from './pages/LoginPage'
+import { MessagesPage } from './pages/MessagesPage'
+import { PatientDetailPage } from './pages/PatientDetailPage'
+import { PatientsPage } from './pages/PatientsPage'
+import { useAppSelector } from './store/hooks'
+
+function RequireAuth({ children }: { children: ReactNode }) {
+  const token = useAppSelector((s) => s.auth.token)
+  return token ? children : <Navigate to="/login" replace />
+}
 
 function App() {
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto max-w-xl px-4 py-12">
-        <h1 className="mb-6 text-3xl font-bold">Algosoup</h1>
-        <ItemList />
-      </div>
-    </main>
+    <BrowserRouter>
+      <Banner />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route element={<RequireAuth><Layout /></RequireAuth>}>
+          <Route path="/patients" element={<PatientsPage />} />
+          <Route path="/patients/:id" element={<PatientDetailPage />} />
+          <Route path="/appointments" element={<AppointmentsPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/patients" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
