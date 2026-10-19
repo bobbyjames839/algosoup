@@ -1,0 +1,22 @@
+# OS / editors
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+*.log
