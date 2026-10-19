@@ -4,8 +4,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from . import realtime
 from .config import CORS_ORIGINS
-from .routers import appointments, auth, messages, patients
+from .routers import appointments, assistant, auth, messages, patients, portal
 
 app = FastAPI(title="GlucoCare API")
 
@@ -20,6 +21,9 @@ app.include_router(auth.router)
 app.include_router(patients.router)
 app.include_router(appointments.router)
 app.include_router(messages.router)
+app.include_router(assistant.router)
+app.include_router(realtime.router)
+app.include_router(portal.router)
 
 
 @app.get("/api/health")

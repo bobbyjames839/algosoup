@@ -37,7 +37,13 @@ export interface AppointmentData {
   hba1c_percent: number | null
   blood_pressure: string | null
   overall_score: number | null
+  chief_complaint: string | null
+  assessment: string | null
+  plan: string | null
+  insulin_regimen: string | null
+  follow_up_weeks: number | null
   notes: string | null
+  updated_at: string
 }
 
 export interface Appointment {
@@ -47,9 +53,30 @@ export interface Appointment {
   scheduled_at: string
   appointment_type: AppointmentType
   status: AppointmentStatus
+  title: string | null
+  description: string | null
+  duration_minutes: number
+  location: string | null
   notes: string | null
+  cancellation_reason: string | null
+  updated_at: string
+  hospital_id: string | null
   appointment_data: AppointmentData | null
   patient: Pick<Patient, 'id' | 'first_name' | 'last_name'> | null
+  doctor: AppointmentDoctor | null
+  hospital: Hospital | null
+}
+
+export interface Hospital {
+  id: string
+  name: string
+  city: string | null
+}
+
+export interface AppointmentDoctor {
+  id: string
+  full_name: string
+  specialty: string | null
 }
 
 export interface Message {
@@ -66,4 +93,13 @@ export interface MessageThread {
   patient: Pick<Patient, 'id' | 'first_name' | 'last_name'>
   last_message: Message
   unread: number
+}
+
+export interface AssistantMessage {
+  role: 'user' | 'assistant'
+  content: string
+  // Display-only, never sent back to the API.
+  reasoning?: string
+  steps?: string[]
+  streaming?: boolean
 }
