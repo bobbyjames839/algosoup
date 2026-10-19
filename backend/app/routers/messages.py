@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import supabase
+from ..realtime import publish
 from ..schemas import MessageCreate, PatientMessageCreate
 from ..security import get_current_doctor
 
@@ -42,7 +43,9 @@ def thread(patient_id: str):
 @router.post("/patient/{patient_id}", status_code=201)
 def reply(patient_id: str, payload: MessageCreate, doctor: dict = Depends(get_current_doctor)):
     data = {"patient_id": patient_id, "doctor_id": doctor["id"], "sender": "doctor", "body": payload.body}
-    return supabase.table("messages").insert(data).execute().data[0]
+    message = supabase.table("messages").insert(data).execute().data[0]
+    publish(message)
+    return message
 
 
 @router.post("/inbound", status_code=201)
@@ -57,4 +60,6 @@ def patient_message(payload: PatientMessageCreate):
         "sender": "patient",
         "body": payload.body,
     }
-    return supabase.table("messages").insert(data).execute().data[0]
+    message = supabase.table("messages").insert(data).execute().data[0]
+    publish(message)
+    return message

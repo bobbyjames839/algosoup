@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useGetInboxQuery } from '../store/api'
 import { loggedOut } from '../store/authSlice'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
+import { useRealtimeMessages } from '../store/realtime'
 
 const navItems = [
   { to: '/patients', label: 'Patients' },
@@ -12,7 +13,8 @@ const navItems = [
 export function Layout() {
   const dispatch = useAppDispatch()
   const doctor = useAppSelector((s) => s.auth.doctor)
-  const { data: inbox } = useGetInboxQuery(undefined, { pollingInterval: 30000, skipPollingIfUnfocused: true })
+  useRealtimeMessages()
+  const { data: inbox } = useGetInboxQuery()
   const unread = inbox?.reduce((n, t) => n + t.unread, 0) ?? 0
   const initials = doctor?.full_name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 

@@ -7,7 +7,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8000',
+      // ws: also proxy the /api/ws WebSocket used for live messages.
+      '/api': { target: 'http://localhost:8000', ws: true },
     },
   },
 })

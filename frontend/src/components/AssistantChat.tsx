@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { AssistantRequestError, streamAssistant } from '../lib/assistantStream'
-import { chatCleared, questionAsked, questionFailed, replyEvent, replyFinished } from '../store/assistantSlice'
+import { questionAsked, questionFailed, replyEvent, replyFinished } from '../store/assistantSlice'
 import { loggedOut } from '../store/authSlice'
 import { bannerShown } from '../store/bannerSlice'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
@@ -64,21 +64,18 @@ export function AssistantChat() {
     ask(body)
   }
 
-  const newChat = () => {
-    abortRef.current?.abort()
-    dispatch(chatCleared())
-  }
-
   return (
     <div className="flex h-full flex-col">
-      <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+      <div ref={listRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
         {messages.length === 0 && (
-          <div className="py-6 text-center">
-            <p className="text-sm text-slate-500">Ask about any patient: glucose trends, appointments, visit records or messages.</p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <div className="flex flex-col items-center py-8 text-center">
+            <AssistantAvatar size="lg" />
+            <p className="mt-3 text-sm font-semibold text-slate-800">GlucoCare Assistant</p>
+            <p className="mt-1 text-sm text-slate-500">Ask about any patient: glucose trends, appointments, visit records or messages.</p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
               {suggestions.map((s) => (
-                <button key={s} onClick={() => ask(s)} className="rounded-sm border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:border-brand-300 hover:bg-brand-50">
-                  {s}
+                <button key={s} onClick={() => ask(s)} className="rounded-full border border-indigo-200 bg-indigo-50/50 px-3 py-1.5 text-xs text-indigo-800 hover:border-indigo-300 hover:bg-indigo-50">
+                  ✦ {s}
                 </button>
               ))}
             </div>
@@ -87,9 +84,8 @@ export function AssistantChat() {
         {messages.map((m, i) =>
           m.role === 'user' ? (
             <div key={i} className="flex justify-end">
-              <div className="max-w-[80%] rounded-md bg-brand-700 px-3 py-2 text-sm text-white">
+              <div className="max-w-[75%] rounded-lg rounded-br-sm bg-slate-800 px-3.5 py-2 text-sm text-white">
                 <p className="whitespace-pre-wrap">{m.content}</p>
-                <p className="mt-1 text-[11px] text-brand-200">You</p>
               </div>
             </div>
           ) : (
@@ -102,14 +98,9 @@ export function AssistantChat() {
           value={body}
           onChange={(e) => setBody(e.target.value)}
           maxLength={4000}
-          placeholder="Ask about a patient…"
-          className="flex-1 rounded-sm border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600"
+          placeholder="Ask the assistant about a patient…"
+          className="flex-1 rounded-sm border border-slate-300 bg-indigo-50/30 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
-        {messages.length > 0 && (
-          <Button type="button" variant="secondary" onClick={newChat}>
-            New chat
-          </Button>
-        )}
         {busy ? (
           <Button type="button" variant="secondary" onClick={() => abortRef.current?.abort()}>
             Stop
@@ -123,17 +114,30 @@ export function AssistantChat() {
   )
 }
 
+export function AssistantAvatar({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-brand-700 font-bold text-white ${size === 'lg' ? 'h-11 w-11 text-sm' : 'h-7 w-7 text-[10px]'}`}
+      aria-hidden
+    >
+      AI
+    </div>
+  )
+}
+
 function AssistantReply({ message: m }: { message: AssistantMessage }) {
   const working = m.streaming && !m.content
   const steps = m.steps ?? []
   return (
-    <div className="flex justify-start">
-      <div className="max-w-[80%] rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-800">
+    <div className="flex items-start gap-2.5">
+      <AssistantAvatar />
+      <div className="min-w-0 max-w-[85%] rounded-lg rounded-tl-sm border border-slate-200 border-l-2 border-l-indigo-500 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-xs">
+        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-indigo-700">Assistant</p>
         {steps.length > 0 && (
-          <ul className="mb-2 space-y-0.5 text-xs text-slate-500">
+          <ul className="mb-2 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
             {steps.map((step, j) => (
-              <li key={j} className="flex items-center gap-1.5">
-                <span className={working && j === steps.length - 1 ? 'animate-pulse text-brand-700' : 'text-emerald-600'}>●</span>
+              <li key={j} className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5">
+                <span className={working && j === steps.length - 1 ? 'animate-pulse text-indigo-600' : 'text-emerald-600'}>●</span>
                 {step}
               </li>
             ))}
@@ -142,21 +146,20 @@ function AssistantReply({ message: m }: { message: AssistantMessage }) {
         {m.reasoning &&
           (working ? (
             // Live reasoning while the assistant works; collapses once the answer starts.
-            <p className="mb-2 max-h-40 overflow-y-auto whitespace-pre-wrap border-l-2 border-slate-300 pl-2 text-xs italic text-slate-500">{m.reasoning}</p>
+            <p className="mb-2 max-h-40 overflow-y-auto whitespace-pre-wrap border-l-2 border-indigo-200 pl-2 text-xs italic text-slate-500">{m.reasoning}</p>
           ) : (
             <details className="mb-2 text-xs text-slate-500">
-              <summary className="cursor-pointer select-none hover:text-slate-700">Reasoning</summary>
-              <p className="mt-1 whitespace-pre-wrap border-l-2 border-slate-300 pl-2 italic">{m.reasoning}</p>
+              <summary className="cursor-pointer select-none hover:text-indigo-700">Show reasoning</summary>
+              <p className="mt-1 whitespace-pre-wrap border-l-2 border-indigo-200 pl-2 italic">{m.reasoning}</p>
             </details>
           ))}
         {working && !m.reasoning && steps.length === 0 && <p className="animate-pulse text-slate-500">Thinking…</p>}
         {m.content && (
-          <p className="whitespace-pre-wrap">
+          <p className="whitespace-pre-wrap leading-relaxed">
             {m.content}
-            {m.streaming && <span className="ml-0.5 animate-pulse">▍</span>}
+            {m.streaming && <span className="ml-0.5 animate-pulse text-indigo-600">▍</span>}
           </p>
         )}
-        <p className="mt-1 text-[11px] text-slate-500">Assistant</p>
       </div>
     </div>
   )

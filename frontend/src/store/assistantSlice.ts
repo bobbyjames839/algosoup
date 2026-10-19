@@ -42,11 +42,10 @@ const assistantSlice = createSlice({
     questionFailed(state) {
       if (streamingReply(state)) state.messages.splice(-2, 2)
     },
-    chatCleared: () => initialState,
   },
   // A conversation belongs to the signed-in doctor.
   extraReducers: (builder) => builder.addMatcher(isAnyOf(loggedIn, patientLoggedIn, loggedOut), () => initialState),
 })
 
-export const { questionAsked, replyEvent, replyFinished, questionFailed, chatCleared } = assistantSlice.actions
+export const { questionAsked, replyEvent, replyFinished, questionFailed } = assistantSlice.actions
 export default assistantSlice.reducer

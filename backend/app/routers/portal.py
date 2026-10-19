@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import supabase
+from ..realtime import publish
 from ..schemas import LoginRequest, MessageCreate
 from ..security import create_token, get_current_patient, verify_password
 from .appointments import SELECT, _normalize
@@ -70,4 +71,6 @@ def messages(patient: dict = Depends(get_current_patient)):
 @router.post("/messages", status_code=201)
 def send_message(payload: MessageCreate, patient: dict = Depends(get_current_patient)):
     data = {"patient_id": patient["id"], "doctor_id": patient["doctor_id"], "sender": "patient", "body": payload.body}
-    return supabase.table("messages").insert(data).execute().data[0]
+    message = supabase.table("messages").insert(data).execute().data[0]
+    publish(message)
+    return message

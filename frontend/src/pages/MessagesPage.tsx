@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AssistantChat } from '../components/AssistantChat'
+import { AssistantAvatar, AssistantChat } from '../components/AssistantChat'
 import { MessageThread } from '../components/MessageThread'
 import { Card, Empty, PageHeader } from '../components/ui'
 import { formatDateTime, fullName } from '../lib/format'
@@ -22,10 +22,15 @@ export function MessagesPage() {
             <li>
               <button
                 onClick={() => setSelected(ASSISTANT)}
-                className={`w-full px-5 py-3 text-left hover:bg-slate-50 ${selected === ASSISTANT ? 'bg-brand-50' : ''}`}
+                className={`w-full px-5 py-3 text-left hover:bg-indigo-50/50 ${selected === ASSISTANT ? 'bg-indigo-50' : ''}`}
               >
-                <span className="text-sm font-semibold text-brand-800">AI Assistant</span>
-                <p className="mt-0.5 truncate text-xs text-slate-500">Ask about any patient and their records</p>
+                <div className="flex items-center gap-3">
+                  <AssistantAvatar />
+                  <div className="min-w-0">
+                    <span className="text-sm font-semibold text-indigo-800">AI Assistant</span>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">Ask about any patient and their records</p>
+                  </div>
+                </div>
               </button>
             </li>
           </ul>

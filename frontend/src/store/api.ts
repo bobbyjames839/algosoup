@@ -145,6 +145,7 @@ export const api = createApi({
     }),
     getMyMessages: build.query<Message[], void>({
       query: () => '/portal/messages',
+      providesTags: [{ type: 'Message', id: 'MINE' }],
     }),
     sendMyMessage: build.mutation<Message, string>({
       query: (body) => ({ url: '/portal/messages', method: 'POST', body: { body } }),
