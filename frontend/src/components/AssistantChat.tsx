@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { AssistantRequestError, streamAssistant } from '../lib/assistantStream'
-import { questionAsked, questionFailed, replyEvent, replyFinished } from '../store/assistantSlice'
+import { useGetAssistantConversationQuery } from '../store/api'
+import { conversationLoaded, questionAsked, questionFailed, replyEvent, replyFinished } from '../store/assistantSlice'
 import { loggedOut } from '../store/authSlice'
 import { bannerShown } from '../store/bannerSlice'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
@@ -14,11 +15,14 @@ const suggestions = [
   'Which patients have unread messages, and what do they need?',
 ]
 
-// The conversation lives in the store, so it survives switching threads and pages (not a reload).
+// One continuous conversation per doctor: saved on the server, loaded once into the store, then kept
+// up to date locally as questions are answered. The server sends the model only the latest messages.
 export function AssistantChat() {
   const token = useAppSelector((s) => s.auth.token)
   const messages = useAppSelector((s) => s.assistant.messages)
+  const loaded = useAppSelector((s) => s.assistant.loaded)
   const dispatch = useAppDispatch()
+  const { data: saved, isError, refetch } = useGetAssistantConversationQuery(undefined, { skip: loaded })
   const [body, setBody] = useState('')
   const abortRef = useRef<AbortController | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -30,19 +34,22 @@ export function AssistantChat() {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight
   }, [messages.length, last?.content, last?.reasoning, last?.steps?.length])
 
+  useEffect(() => {
+    if (saved && !loaded) dispatch(conversationLoaded(saved))
+  }, [saved, loaded, dispatch])
+
   // Leaving the chat cancels the request, which stops the backend spending tokens.
   useEffect(() => () => abortRef.current?.abort(), [])
 
   const ask = async (question: string) => {
-    if (!question.trim() || busy) return
-    const history: AssistantMessage[] = [...messages, { role: 'user', content: question.trim() }]
+    if (!question.trim() || busy || !loaded) return
     dispatch(questionAsked(question.trim()))
     setBody('')
     const controller = new AbortController()
     abortRef.current = controller
 
     try {
-      await streamAssistant(history, token, (event) => dispatch(replyEvent(event)), controller.signal)
+      await streamAssistant(question.trim(), token, (event) => dispatch(replyEvent(event)), controller.signal)
       dispatch(replyFinished({ fallback: 'No answer was received. Please try again.' }))
     } catch (err) {
       if (controller.signal.aborted) {
@@ -67,7 +74,19 @@ export function AssistantChat() {
   return (
     <div className="flex h-full flex-col">
       <div ref={listRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-        {messages.length === 0 && (
+        {!loaded && (
+          <div className="py-8 text-center text-sm text-slate-500">
+            {isError ? (
+              <>
+                Couldn't load your conversation.{' '}
+                <button onClick={() => refetch()} className="font-medium text-indigo-700 hover:underline">Try again</button>
+              </>
+            ) : (
+              'Loading conversation…'
+            )}
+          </div>
+        )}
+        {loaded && messages.length === 0 && (
           <div className="flex flex-col items-center py-8 text-center">
             <AssistantAvatar size="lg" />
             <p className="mt-3 text-sm font-semibold text-slate-800">GlucoCare Assistant</p>
@@ -98,6 +117,7 @@ export function AssistantChat() {
           value={body}
           onChange={(e) => setBody(e.target.value)}
           maxLength={4000}
+          disabled={!loaded}
           placeholder="Ask the assistant about a patient…"
           className="flex-1 rounded-sm border border-slate-300 bg-indigo-50/30 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
@@ -106,7 +126,7 @@ export function AssistantChat() {
             Stop
           </Button>
         ) : (
-          <Button disabled={!body.trim()}>Ask</Button>
+          <Button disabled={!loaded || !body.trim()}>Ask</Button>
         )}
       </form>
       <p className="mt-2 text-[11px] text-slate-400">AI answers can be wrong. Check important details against the patient record.</p>

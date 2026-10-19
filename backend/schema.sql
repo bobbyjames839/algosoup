@@ -101,6 +101,17 @@ create table if not exists assistant_usage (
 create index if not exists assistant_usage_time_idx on assistant_usage (created_at);
 create index if not exists assistant_usage_doctor_time_idx on assistant_usage (doctor_id, created_at);
 
+create table if not exists assistant_messages (
+  id uuid primary key default gen_random_uuid(),
+  doctor_id uuid not null references doctors(id) on delete cascade,
+  role text not null check (role in ('user','assistant')),
+  content text not null,
+  reasoning text,
+  steps jsonb not null default '[]',
+  created_at timestamptz not null default now()
+);
+create index if not exists assistant_messages_doctor_time_idx on assistant_messages (doctor_id, created_at desc);
+
 -- Lock tables down: only the backend (service role key) can access them.
 alter table hospitals enable row level security;
 alter table doctors enable row level security;
@@ -110,3 +121,4 @@ alter table appointments enable row level security;
 alter table appointment_data enable row level security;
 alter table messages enable row level security;
 alter table assistant_usage enable row level security;
+alter table assistant_messages enable row level security;

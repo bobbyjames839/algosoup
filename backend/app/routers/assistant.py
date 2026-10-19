@@ -17,6 +17,7 @@ from ..config import (
     OPENAI_REASONING_EFFORT,
     ASSISTANT_DAILY_TOKENS_PER_DOCTOR,
     ASSISTANT_DAILY_TOKENS_TOTAL,
+    ASSISTANT_HISTORY_MESSAGES,
     ASSISTANT_MAX_TOKENS_PER_QUESTION,
     ASSISTANT_REQUESTS_PER_DAY,
     ASSISTANT_REQUESTS_PER_MINUTE,
@@ -28,7 +29,7 @@ from ..security import get_current_doctor
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
 IN_RANGE = (3.9, 10.0)  # mmol/L target range used for time-in-range
-HISTORY_LIMIT = 20  # most recent conversation messages sent to the model
+DISPLAY_LIMIT = 200  # most recent conversation messages returned to the chat UI
 MAX_TOOL_ROUNDS = 8
 MAX_OUTPUT_TOKENS = 8192  # per model call, including reasoning tokens
 
@@ -235,8 +236,6 @@ def chat(payload: AssistantChatRequest, doctor: dict = Depends(get_current_docto
     `thinking` / `text` (deltas to append), `tool` (a lookup started), `error`, then `done`."""
     if not OPENAI_API_KEY or not OPENAI_MODEL:
         raise HTTPException(503, "The assistant isn't configured: set OPENAI_API_KEY and OPENAI_MODEL in backend/.env")
-    if payload.messages[-1].role != "user":
-        raise HTTPException(422, "The last message must be the doctor's question.")
 
     # Limits are checked before the stream starts so they come back as normal HTTP errors.
     with _in_flight_lock:
@@ -249,15 +248,44 @@ def chat(payload: AssistantChatRequest, doctor: dict = Depends(get_current_docto
         except APIError:
             # Fail closed: without usage tracking there's no spend limit.
             raise HTTPException(503, "Assistant usage tracking isn't set up: run backend/migrations/002_assistant_usage.sql")
+        try:
+            history = _model_history(doctor["id"])
+        except APIError:
+            raise HTTPException(503, "Assistant conversation storage isn't set up: run backend/migrations/004_assistant_messages.sql")
     except BaseException:
         _release(doctor["id"])
         raise
 
     return StreamingResponse(
-        _stream_answer(payload, doctor),
+        _stream_answer(payload.message, history, doctor),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/messages")
+def conversation(doctor: dict = Depends(get_current_doctor)):
+    """The doctor's one continuous assistant conversation (most recent DISPLAY_LIMIT messages), oldest first."""
+    try:
+        rows = (
+            supabase.table("assistant_messages").select("id, role, content, reasoning, steps, created_at")
+            .eq("doctor_id", doctor["id"]).order("created_at", desc=True).limit(DISPLAY_LIMIT).execute().data
+        )
+    except APIError:
+        raise HTTPException(503, "Assistant conversation storage isn't set up: run backend/migrations/004_assistant_messages.sql")
+    return rows[::-1]
+
+
+def _model_history(doctor_id: str) -> list[dict]:
+    """The last ASSISTANT_HISTORY_MESSAGES messages, oldest first, as model input. Starts with a question,
+    since a reply whose question was cut off is meaningless context."""
+    rows = (
+        supabase.table("assistant_messages").select("role, content")
+        .eq("doctor_id", doctor_id).order("created_at", desc=True).limit(ASSISTANT_HISTORY_MESSAGES).execute().data
+    )[::-1]
+    while rows and rows[0]["role"] != "user":
+        rows.pop(0)
+    return [{"role": r["role"], "content": r["content"]} for r in rows]
 
 
 def _release(doctor_id: str) -> None:
@@ -275,10 +303,11 @@ def _run_tool(name: str, arguments: str) -> str:
         return f"Error: {e}"
 
 
-async def _stream_answer(payload: AssistantChatRequest, doctor: dict) -> AsyncIterator[str]:
-    history = [m.model_dump() for m in payload.messages[-HISTORY_LIMIT:]]
-    while history[0]["role"] != "user":
-        history.pop(0)
+async def _stream_answer(question: str, history: list[dict], doctor: dict) -> AsyncIterator[str]:
+    asked_at = datetime.now(timezone.utc)
+    history = [*history, {"role": "user", "content": question}]
+    # What gets saved to the conversation: the answer text (not transient errors), reasoning and lookup steps.
+    reply = {"content": "", "reasoning": "", "steps": []}
     instructions = SYSTEM.format(doctor_name=doctor["full_name"], today=datetime.now(timezone.utc).date().isoformat())
     client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
     input_tokens = output_tokens = 0
@@ -287,6 +316,10 @@ async def _stream_answer(payload: AssistantChatRequest, doctor: dict) -> AsyncIt
 
     def separator(kind: str) -> str:
         return "\n\n" if sent[kind] else ""
+
+    def answer(text: str) -> str:
+        reply["content"] += text
+        return _event(type="text", text=text)
 
     try:
         for _ in range(MAX_TOOL_ROUNDS):
@@ -308,20 +341,24 @@ async def _stream_answer(payload: AssistantChatRequest, doctor: dict) -> AsyncIt
                 async for event in stream:
                     if event.type == "response.reasoning_summary_part.added":
                         if sent["thinking"]:
+                            reply["reasoning"] += "\n\n"
                             yield _event(type="thinking", text="\n\n")
                     elif event.type == "response.reasoning_summary_text.delta":
                         sent["thinking"] = True
                         call_out += _estimate_tokens(event.delta) or 1
+                        reply["reasoning"] += event.delta
                         yield _event(type="thinking", text=event.delta)
                     elif event.type == "response.output_item.added":
                         if event.item.type == "function_call":
-                            yield _event(type="tool", name=event.item.name, label=TOOL_LABELS.get(event.item.name, "Looking up records"))
+                            label = TOOL_LABELS.get(event.item.name, "Looking up records")
+                            reply["steps"].append(label)
+                            yield _event(type="tool", name=event.item.name, label=label)
                         elif event.item.type == "message" and sent["text"]:
-                            yield _event(type="text", text="\n\n")
+                            yield answer("\n\n")
                     elif event.type == "response.output_text.delta":
                         sent["text"] = True
                         call_out += _estimate_tokens(event.delta) or 1
-                        yield _event(type="text", text=event.delta)
+                        yield answer(event.delta)
                     elif event.type in ("response.completed", "response.incomplete"):
                         response = event.response
                     elif event.type == "response.failed":
@@ -340,21 +377,21 @@ async def _stream_answer(payload: AssistantChatRequest, doctor: dict) -> AsyncIt
             calls = [item for item in response.output if item.type == "function_call"]
             refusal = any(c.type == "refusal" for item in response.output if item.type == "message" for c in item.content)
             if refusal:
-                yield _event(type="text", text=separator("text") + "I can't help with that request.")
+                yield answer(separator("text") + "I can't help with that request.")
                 break
             if response.status == "incomplete" or input_tokens + output_tokens >= ASSISTANT_MAX_TOKENS_PER_QUESTION:
-                yield _event(type="text", text=separator("text") + "That question needed more data than I'm allowed to look through at once. Try narrowing it down, e.g. to one patient or a shorter date range.")
+                yield answer(separator("text") + "That question needed more data than I'm allowed to look through at once. Try narrowing it down, e.g. to one patient or a shorter date range.")
                 break
             if not calls:
                 if not sent["text"]:
-                    yield _event(type="text", text="I couldn't produce an answer. Try rephrasing the question.")
+                    yield answer("I couldn't produce an answer. Try rephrasing the question.")
                 break
 
             for call in calls:
                 output = await anyio.to_thread.run_sync(_run_tool, call.name, call.arguments)
                 history.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
         else:
-            yield _event(type="text", text=separator("text") + "That question needed more lookups than I'm allowed. Try narrowing it down.")
+            yield answer(separator("text") + "That question needed more lookups than I'm allowed. Try narrowing it down.")
         yield _event(type="done")
     except openai.RateLimitError:
         yield _event(type="error", message="The assistant is busy right now. Try again in a moment.")
@@ -372,5 +409,15 @@ async def _stream_answer(payload: AssistantChatRequest, doctor: dict) -> AsyncIt
                         {"doctor_id": doctor["id"], "input_tokens": input_tokens + call_in, "output_tokens": output_tokens + call_out}
                     ).execute()
                 )
+                # Keep the exchange in the conversation if any answer was given (including a partial one
+                # the doctor stopped). Explicit timestamps keep the question before its reply.
+                if reply["content"].strip():
+                    await anyio.to_thread.run_sync(
+                        lambda: supabase.table("assistant_messages").insert([
+                            {"doctor_id": doctor["id"], "role": "user", "content": question, "reasoning": None, "steps": [], "created_at": asked_at.isoformat()},
+                            {"doctor_id": doctor["id"], "role": "assistant", "content": reply["content"].strip(), "reasoning": reply["reasoning"].strip() or None,
+                             "steps": reply["steps"], "created_at": datetime.now(timezone.utc).isoformat()},
+                        ]).execute()
+                    )
             finally:
                 _release(doctor["id"])

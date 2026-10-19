@@ -8,7 +8,7 @@ from app.routers import assistant
 
 from .conftest import auth
 
-QUESTION = {"messages": [{"role": "user", "content": "How is Amy doing?"}]}
+QUESTION = {"message": "How is Amy doing?"}
 
 
 class _Item(NS):
@@ -103,9 +103,8 @@ def test_chat_without_api_key(client, monkeypatch, doctor):
     assert client.post("/api/assistant/chat", headers=auth(doctor), json=QUESTION).status_code == 503
 
 
-def test_chat_must_end_with_question(client, model, doctor):
-    body = {"messages": [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello"}]}
-    assert client.post("/api/assistant/chat", headers=auth(doctor), json=body).status_code == 422
+def test_chat_rejects_blank_question(client, model, doctor):
+    assert client.post("/api/assistant/chat", headers=auth(doctor), json={"message": "   "}).status_code == 422
 
 
 def test_chat_rate_limited_per_minute(client, db, model, doctor):
@@ -155,3 +154,54 @@ def test_chat_invalid_tool_arguments_are_reported_to_model(client, model, doctor
     model.calls += [FakeStream(tool_uses=[("get_glucose_readings", {"patient_id": "p1", "days": "lots"})]), FakeStream(text="Sorry.")]
     client.post("/api/assistant/chat", headers=auth(doctor), json=QUESTION)
     assert model.requests[1]["input"][-1]["output"].startswith("Error")
+
+
+def _saved(db, doctor, role, content, minutes_ago):
+    created = datetime.now(timezone.utc).timestamp() - minutes_ago * 60
+    return db.add("assistant_messages", doctor_id=doctor["id"], role=role, content=content, reasoning=None, steps=[],
+                  created_at=datetime.fromtimestamp(created, timezone.utc).isoformat())
+
+
+def test_chat_saves_exchange_to_continuous_conversation(client, db, model, doctor):
+    model.calls += [FakeStream(tool_uses=[("search_patients", {"query": "Amy"})]), FakeStream(text="Amy is doing well.")]
+
+    client.post("/api/assistant/chat", headers=auth(doctor), json=QUESTION)
+
+    res = client.get("/api/assistant/messages", headers=auth(doctor))
+    assert res.status_code == 200
+    assert [(m["role"], m["content"], m["steps"]) for m in res.json()] == [
+        ("user", "How is Amy doing?", []),
+        ("assistant", "Amy is doing well.", ["Searching patients"]),
+    ]
+
+
+def test_chat_sends_only_last_messages_to_model(client, db, model, doctor, monkeypatch):
+    monkeypatch.setattr(assistant, "ASSISTANT_HISTORY_MESSAGES", 3)
+    for i, (role, content) in enumerate([("user", "q1"), ("assistant", "a1"), ("user", "q2"), ("assistant", "a2")]):
+        _saved(db, doctor, role, content, minutes_ago=10 - i)
+    model.calls.append(FakeStream(text="a3"))
+
+    client.post("/api/assistant/chat", headers=auth(doctor), json={"message": "q3"})
+
+    # The last 3 saved messages are a1, q2, a2; a1 is dropped so the context starts with a question.
+    assert model.requests[0]["input"] == [
+        {"role": "user", "content": "q2"},
+        {"role": "assistant", "content": "a2"},
+        {"role": "user", "content": "q3"},
+    ]
+
+
+def test_conversation_is_per_doctor(client, db, model, doctor, other_doctor):
+    _saved(db, doctor, "user", "mine", minutes_ago=1)
+    assert client.get("/api/assistant/messages", headers=auth(other_doctor)).json() == []
+
+
+def test_failed_question_is_not_saved(client, db, model, doctor):
+    async def fail(**kwargs):
+        raise assistant.openai.APIConnectionError(request=None)
+
+    model.calls.clear()
+    assistant.openai.AsyncOpenAI = lambda **_: NS(responses=NS(create=fail))
+    events = _events(client.post("/api/assistant/chat", headers=auth(doctor), json=QUESTION))
+    assert events[-1]["type"] == "error"
+    assert db.tables.get("assistant_messages", []) == []

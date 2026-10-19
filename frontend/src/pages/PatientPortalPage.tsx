@@ -99,14 +99,9 @@ export function PatientPortalPage() {
               <Card title={`Glucose readings — last ${DAYS} days`} className="mb-6">
                 {readings.length ? <GlucoseChart readings={readings} days={DAYS} /> : <Empty>No readings in the last {DAYS} days.</Empty>}
               </Card>
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <Card title="Upcoming appointments">
-                  {upcoming.length ? <AppointmentList items={upcoming.slice(0, 3)} /> : <Empty>No upcoming appointments.</Empty>}
-                </Card>
-                <Card title="Messages" bodyClassName="p-5 h-80">
-                  <PortalMessages />
-                </Card>
-              </div>
+              <Card title="Upcoming appointments">
+                {upcoming.length ? <AppointmentList items={upcoming.slice(0, 3)} /> : <Empty>No upcoming appointments.</Empty>}
+              </Card>
             </>
           )}
 

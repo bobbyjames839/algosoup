@@ -3,20 +3,37 @@ import type { FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { Button, Field, Input } from '../components/ui'
 import { useLoginMutation, usePatientLoginMutation } from '../store/api'
+import { errorMessage } from '../store/bannerSlice'
 import { loggedIn, patientLoggedIn } from '../store/authSlice'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 
 export function LoginPage() {
   const dispatch = useAppDispatch()
   const { token, patient } = useAppSelector((s) => s.auth)
-  const [login, { isLoading: doctorLoading }] = useLoginMutation()
-  const [patientLogin, { isLoading: patientLoading }] = usePatientLoginMutation()
+  const [login, { isLoading: doctorLoading, error: doctorError, reset: resetDoctor }] = useLoginMutation()
+  const [patientLogin, { isLoading: patientLoading, error: patientError, reset: resetPatient }] = usePatientLoginMutation()
   const [asPatient, setAsPatient] = useState(false)
   const isLoading = doctorLoading || patientLoading
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
 
   if (token) return <Navigate to={patient ? '/portal' : '/patients'} replace />
+
+  const error = asPatient ? patientError : doctorError
+  const errorText =
+    error && 'status' in error
+      ? error.status === 401
+        ? `Incorrect ${asPatient ? 'email' : 'username'} or password.`
+        : errorMessage(asPatient ? 'patientLogin' : 'login', error)
+      : error
+        ? 'Something went wrong. Please try again.'
+        : null
+
+  const switchTab = (p: boolean) => {
+    setAsPatient(p)
+    resetDoctor()
+    resetPatient()
+  }
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -46,7 +63,7 @@ export function LoginPage() {
               <button
                 key={String(p)}
                 type="button"
-                onClick={() => setAsPatient(p)}
+                onClick={() => switchTab(p)}
                 className={`rounded-sm py-1.5 ${asPatient === p ? 'bg-brand-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 {p ? 'Patient' : 'Clinician'}
@@ -59,6 +76,11 @@ export function LoginPage() {
           <Field label="Password">
             <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
           </Field>
+          {errorText && (
+            <p role="alert" className="rounded-sm border border-l-4 border-red-200 border-l-red-600 bg-red-50 px-3 py-2 text-sm text-red-800">
+              {errorText}
+            </p>
+          )}
           <Button className="w-full" disabled={isLoading}>
             {isLoading ? 'Signing in…' : 'Sign in'}
           </Button>

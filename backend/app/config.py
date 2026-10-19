@@ -16,6 +16,7 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL")
 OPENAI_REASONING_EFFORT = os.getenv("OPENAI_REASONING_EFFORT", "low")
 
 # AI assistant limits (see CLAUDE.md). Tokens = input (incl. cache) + output.
+ASSISTANT_HISTORY_MESSAGES = int(os.getenv("ASSISTANT_HISTORY_MESSAGES", "20"))  # past messages sent to the model with each question
 ASSISTANT_REQUESTS_PER_MINUTE = int(os.getenv("ASSISTANT_REQUESTS_PER_MINUTE", "5"))
 ASSISTANT_REQUESTS_PER_DAY = int(os.getenv("ASSISTANT_REQUESTS_PER_DAY", "100"))
 ASSISTANT_MAX_TOKENS_PER_QUESTION = int(os.getenv("ASSISTANT_MAX_TOKENS_PER_QUESTION", "150000"))

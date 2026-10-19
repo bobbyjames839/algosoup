@@ -18,7 +18,7 @@ function sseResponse(chunks: string[]) {
   return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
 }
 
-const question = [{ role: 'user' as const, content: 'How is Amy?' }]
+const question = 'How is Amy?'
 
 describe('streamAssistant', () => {
   it('parses events, including frames split across chunks', async () => {
@@ -44,7 +44,7 @@ describe('streamAssistant', () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('/api/assistant/chat')
     expect(init.headers.Authorization).toBe('Bearer tok')
-    expect(JSON.parse(init.body)).toEqual({ messages: question })
+    expect(JSON.parse(init.body)).toEqual({ message: question })
   })
 
   it('throws the API detail for errors returned before streaming', async () => {
