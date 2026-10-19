@@ -96,33 +96,38 @@ export function PatientDetailPage() {
           {prior.length === 0 ? (
             <Empty>No prior appointments.</Empty>
           ) : (
-            <div className="-my-5 divide-y divide-slate-200">
+            <div className="-my-4 divide-y divide-slate-200">
               {prior.map((a) => (
-                <article key={a.id} className="py-5">
-                  <header className="mb-4 flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <h3 className="font-semibold text-slate-900">{appointmentTitle(a)}</h3>
-                      <p className="text-xs text-slate-500">
-                        {[formatDateTime(a.scheduled_at), `${a.duration_minutes} min`, a.location].filter(Boolean).join(' · ')}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        <span className="font-semibold text-slate-800">{a.doctor?.full_name ?? 'Unknown clinician'}</span>
-                        {a.doctor?.specialty && ` · ${a.doctor.specialty}`}
-                        {a.hospital && ` · ${hospitalLabel(a.hospital)}`}
-                        {a.doctor_id === myId && <span className="ml-2 rounded-sm bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-brand-700">You</span>}
-                      </p>
+                <details key={a.id} className="group py-4">
+                  <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-2 [&::-webkit-details-marker]:hidden">
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 text-xs text-slate-400 transition-transform group-open:rotate-90" aria-hidden>▶</span>
+                      <div>
+                        <h3 className="font-semibold text-slate-900">{appointmentTitle(a)}</h3>
+                        <p className="text-xs text-slate-500">
+                          {[formatDateTime(a.scheduled_at), `${a.duration_minutes} min`, a.location].filter(Boolean).join(' · ')}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          <span className="font-semibold text-slate-800">{a.doctor?.full_name ?? 'Unknown clinician'}</span>
+                          {a.doctor?.specialty && ` · ${a.doctor.specialty}`}
+                          {a.hospital && ` · ${hospitalLabel(a.hospital)}`}
+                          {a.doctor_id === myId && <span className="ml-2 rounded-sm bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-brand-700">You</span>}
+                        </p>
+                      </div>
                     </div>
                     <div className="flex gap-1.5">
                       <Badge tone={a.appointment_type}>{humanize(a.appointment_type)}</Badge>
                       <Badge tone={a.status}>{humanize(a.status)}</Badge>
                     </div>
-                  </header>
-                  {a.status === 'cancelled' ? (
-                    <p className="text-sm text-slate-500">Cancelled{a.cancellation_reason ? `: ${a.cancellation_reason}` : '.'}</p>
-                  ) : (
-                    <VisitRecord data={a.appointment_data} />
-                  )}
-                </article>
+                  </summary>
+                  <div className="mt-4 pl-6">
+                    {a.status === 'cancelled' ? (
+                      <p className="text-sm text-slate-500">Cancelled{a.cancellation_reason ? `: ${a.cancellation_reason}` : '.'}</p>
+                    ) : (
+                      <VisitRecord data={a.appointment_data} />
+                    )}
+                  </div>
+                </details>
               ))}
             </div>
           )}
