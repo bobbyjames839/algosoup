@@ -29,12 +29,12 @@ export function GlucoseChart({ readings, days = 7 }: { readings: GlucoseReading[
         <Line
           type="monotone"
           dataKey="value"
-          stroke="#1d4ed8"
+          stroke="#173c6e"
           strokeWidth={2}
           dot={(props) => {
             const { cx, cy, payload, index } = props
             const out = payload.value < TARGET_LOW || payload.value > TARGET_HIGH
-            const color = payload.value < TARGET_LOW ? '#dc2626' : payload.value > TARGET_HIGH ? '#d97706' : '#1d4ed8'
+            const color = payload.value < TARGET_LOW ? '#dc2626' : payload.value > TARGET_HIGH ? '#d97706' : '#173c6e'
             return <circle key={index} cx={cx} cy={cy} r={out ? 4 : 3} fill={color} stroke="white" strokeWidth={1} />
           }}
           isAnimationActive={false}

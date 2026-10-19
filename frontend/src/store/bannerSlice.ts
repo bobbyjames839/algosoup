@@ -30,10 +30,8 @@ export default bannerSlice.reducer
 
 const successMessages: Record<string, string> = {
   createPatient: 'Patient added.',
-  addGlucose: 'Glucose reading logged.',
   createAppointment: 'Appointment booked.',
   updateAppointmentStatus: 'Appointment status updated.',
-  saveAppointmentData: 'Appointment data saved.',
   sendMessage: 'Message sent.',
 }
 

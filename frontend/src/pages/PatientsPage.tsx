@@ -27,19 +27,19 @@ export function PatientsPage() {
           <Empty>No patients found.</Empty>
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="border-b-2 border-slate-200 text-[11px] uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="py-2 font-medium">Name</th>
-                <th className="py-2 font-medium">Age</th>
-                <th className="py-2 font-medium">Diagnosed</th>
-                <th className="py-2 font-medium">Email</th>
-                <th className="py-2 font-medium">Phone</th>
+                <th className="py-2 font-semibold">Name</th>
+                <th className="py-2 font-semibold">Age</th>
+                <th className="py-2 font-semibold">Diagnosed</th>
+                <th className="py-2 font-semibold">Email</th>
+                <th className="py-2 font-semibold">Phone</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.map((p) => (
                 <tr key={p.id} onClick={() => navigate(`/patients/${p.id}`)} className="cursor-pointer hover:bg-slate-50">
-                  <td className="py-3 font-medium text-blue-700">{fullName(p)}</td>
+                  <td className="py-3 font-medium text-brand-700">{fullName(p)}</td>
                   <td className="py-3">{age(p.date_of_birth) ?? '—'}</td>
                   <td className="py-3">{formatDate(p.diagnosis_date)}</td>
                   <td className="py-3 text-slate-600">{p.email ?? '—'}</td>
