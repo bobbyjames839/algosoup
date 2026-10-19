@@ -35,7 +35,7 @@ const successMessages: Record<string, string> = {
   sendMessage: 'Message sent.',
 }
 
-function errorMessage(endpoint: string, error: FetchBaseQueryError): string {
+export function errorMessage(endpoint: string, error: FetchBaseQueryError): string {
   if (error.status === 401) return endpoint === 'login' ? 'Invalid username or password.' : 'Your session has expired. Please sign in again.'
   if (error.status === 'FETCH_ERROR') return 'Unable to reach the server. Check your connection.'
   const detail = (error.data as { detail?: unknown } | undefined)?.detail
@@ -46,12 +46,15 @@ function errorMessage(endpoint: string, error: FetchBaseQueryError): string {
 
 type ApiMeta = { arg?: { endpointName?: string; type?: 'query' | 'mutation' } }
 
+// These show their own errors inline (the login form).
+export const INLINE_ERROR_ENDPOINTS = new Set(['login', 'patientLogin'])
+
 // Turns every RTK Query result into a banner: all errors, plus success for known mutations.
 export const bannerMiddleware: Middleware = (store) => (next) => (action) => {
   const result = next(action)
   if (isRejectedWithValue(action)) {
     const endpoint = (action.meta as ApiMeta).arg?.endpointName ?? ''
-    store.dispatch(bannerShown({ tone: 'error', message: errorMessage(endpoint, action.payload as FetchBaseQueryError) }))
+    if (!INLINE_ERROR_ENDPOINTS.has(endpoint)) store.dispatch(bannerShown({ tone: 'error', message: errorMessage(endpoint, action.payload as FetchBaseQueryError) }))
   } else if (isFulfilled(action)) {
     const arg = (action.meta as ApiMeta).arg
     const message = arg?.type === 'mutation' && arg.endpointName ? successMessages[arg.endpointName] : undefined

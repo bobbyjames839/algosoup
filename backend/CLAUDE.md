@@ -43,16 +43,17 @@ The frontend types in `frontend/src/types.ts` (`Appointment`, `AppointmentData`)
 
 An AI assistant (OpenAI) the doctor can ask about any patient. It appears in the frontend as a pinned **AI Assistant** conversation at the top of the Messages inbox (`frontend/src/components/AssistantChat.tsx`, wired up in `frontend/src/pages/MessagesPage.tsx`).
 
-- **Endpoint:** `POST /api/assistant/chat` (doctor auth required). Body: `{"messages": [{"role": "user"|"assistant", "content": "..."}]}`, the whole conversation so far ending with the new question. It's stateless: the frontend keeps the history in `MessagesPage` state, so it survives switching threads but not a page reload.
+- **One continuous conversation per doctor** (no "new chat"), stored in `assistant_messages` (migration `004_assistant_messages.sql`). `GET /api/assistant/messages` returns the latest 200 messages, oldest first, with saved reasoning and lookup steps.
+- **Endpoint:** `POST /api/assistant/chat` (doctor auth required). Body: `{"message": "..."}`, just the new question. The backend loads the last `ASSISTANT_HISTORY_MESSAGES` (default 20) saved messages, drops a leading reply so the context starts with a question, and sends those plus the new question to the model. The question and reply are saved once the answer finishes. If the doctor stops it partway, the partial reply is saved. If no answer text was produced (e.g. an error), nothing is saved.
 - **Streaming:** the response is server-sent events (`text/event-stream`). Each `data:` line is JSON:
   - `{"type": "thinking", "text"}` and `{"type": "text", "text"}` are deltas to append (reasoning summary / answer).
   - `{"type": "tool", "name", "label"}` means a lookup started (the label is for display).
   - `{"type": "error", "message"}` is an error after streaming began.
   - `{"type": "done"}` ends a successful answer.
   - Auth, validation and rate-limit failures happen before the stream starts and come back as normal JSON HTTP errors.
-- **Frontend:** `frontend/src/lib/assistantStream.ts` reads the stream with `fetch` (EventSource can't POST), and `AssistantChat.tsx` renders it: the lookup steps, live reasoning that collapses into a "Reasoning" toggle once the answer starts, and the answer typing in. **Stop**, **New chat** and leaving the chat all abort the request, and the backend then stops the model call so no more tokens are spent.
+- **Frontend:** `frontend/src/lib/assistantStream.ts` reads the stream with `fetch` (EventSource can't POST), and `AssistantChat.tsx` renders it: the lookup steps, live reasoning that collapses into a "Show reasoning" toggle once the answer starts, and the answer typing in. The conversation is fetched once into `store/assistantSlice.ts` (input is disabled until then) and updated locally after that. **Stop** and leaving the chat abort the request, and the backend then stops the model call so no more tokens are spent.
 - **Config:** `OPENAI_API_KEY` and `OPENAI_MODEL` (currently `gpt-6-luna`) in `backend/.env`, plus optional `OPENAI_REASONING_EFFORT` (default `low`). Without the key or model the endpoint returns 503 and the rest of the app works normally.
-- **How it works:** a streaming tool loop (`_stream_answer`) over the OpenAI Responses API (`AsyncOpenAI().responses.create(stream=True)`), with reasoning summaries on (`reasoning.summary: "auto"`). The model only produces a summary when it actually reasons, so simple lookups often show none. It runs up to 8 tool rounds and 8,192 output tokens (including reasoning) per model call, and only the last 20 messages of the conversation are sent.
+- **How it works:** a streaming tool loop (`_stream_answer`) over the OpenAI Responses API (`AsyncOpenAI().responses.create(stream=True)`), with reasoning summaries on (`reasoning.summary: "auto"`). The model only produces a summary when it actually reasons, so simple lookups often show none. It runs up to 8 tool rounds and 8,192 output tokens (including reasoning) per model call. Tool calls and their results from earlier questions aren't kept, only the question and answer text, so the model looks data up again when it needs it.
 - `store=False`, so OpenAI doesn't keep the conversation. Reasoning is carried between tool calls through `include=["reasoning.encrypted_content"]`. Tools are strict function schemas, and the Python functions are wrapped in pydantic `validate_call`, so bad arguments come back to the model as an error instead of running.
 - **Tools** (read-only plain functions in `assistant.py`, querying Supabase directly):
   - `search_patients`: name/email match
@@ -93,3 +94,15 @@ Every question is logged in the `assistant_usage` table (migration `002_assistan
 - Input is capped at 4,000 characters per message. Tool results are capped too: glucose readings at 90 days, messages at 100, search results at 25, appointments at 200.
 - `POST /api/auth/register` is open, so anyone can create more doctor accounts. The global daily cap is what bounds total spend.
 - Also set a monthly budget and usage limit in the OpenAI dashboard as a hard backstop.
+
+## Live messages (`app/realtime.py`)
+
+Patient–doctor messages are pushed to browsers over a WebSocket at `/api/ws`, so they appear instantly. Nothing polls any more.
+
+- **Protocol:** the client's first frame is `{"token": "<JWT>"}`. Browsers can't set headers on a WebSocket, and a token in the URL would end up in logs. The server replies `{"type": "ready"}`, then sends `{"type": "message", "message": {...message row}}` for every new message. It closes with code `4401` for a bad, expired or unknown token (the frontend doesn't retry that code) and when the token expires.
+- **Who gets what:** doctors get every message, matching the inbox, which shows every conversation. A patient only gets their own.
+- **Publishing:** every route that inserts a message calls `realtime.publish(row)`: doctor reply, patient portal send and `/inbound`. A new route that inserts messages must do the same. Messages written straight to the database bypass this.
+- **Single process only:** connections are held in this process's memory, which works with the Dockerfile's single uvicorn process. With several workers or instances, publish through a shared broker such as Redis pub/sub.
+- **Slow clients:** each connection buffers 100 events. A client that stops reading is disconnected and catches up when it reconnects.
+- **Frontend:** `frontend/src/store/realtime.ts` (`useRealtimeMessages`, used in `Layout` and `PatientPortalPage`) reconnects with backoff up to 30s, and refetches messages after a reconnect to catch anything missed. New messages are added straight into the RTK Query cache. A patient message refetches the thread if the doctor has it open, which also marks it read. The Vite dev proxy has `ws: true` for this.
+- Requires the `websockets` package (pinned in `requirements.txt`); without it uvicorn can't accept WebSocket connections.

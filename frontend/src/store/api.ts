@@ -1,6 +1,7 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react'
 import type {
+  AssistantMessage,
   Appointment,
   AppointmentStatus,
   AppointmentType,
@@ -10,6 +11,7 @@ import type {
   MessageThread,
   Patient,
 } from '../types'
+import { INLINE_ERROR_ENDPOINTS } from './bannerSlice'
 import { loggedOut } from './authSlice'
 
 const rawBaseQuery = fetchBaseQuery({
@@ -23,8 +25,14 @@ const rawBaseQuery = fetchBaseQuery({
 
 const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (args, api, extra) => {
   const result = await rawBaseQuery(args, api, extra)
-  if (result.error?.status === 401) api.dispatch(loggedOut())
+  if (result.error?.status === 401 && !INLINE_ERROR_ENDPOINTS.has(api.endpoint)) api.dispatch(loggedOut())
   return result
+}
+
+// Adds a message to a cached thread unless it's already there. A sent message can arrive both in the
+// mutation response and over the realtime socket, in either order.
+export function addMessage(draft: Message[], message: Message) {
+  if (!draft.some((m) => m.id === message.id)) draft.push(message)
 }
 
 export type NewPatient = Omit<Patient, 'id' | 'doctor_id' | 'created_at'>
@@ -116,7 +124,7 @@ export const api = createApi({
       onQueryStarted: async ({ patientId }, { dispatch, queryFulfilled }) => {
         const { data } = await queryFulfilled.catch(() => ({ data: null }))
         if (!data) return
-        dispatch(api.util.updateQueryData('getThread', patientId, (draft) => void draft.push(data)))
+        dispatch(api.util.updateQueryData('getThread', patientId, (draft) => addMessage(draft, data)))
         let inInbox = false
         dispatch(
           api.util.updateQueryData('getInbox', undefined, (draft) => {
@@ -143,6 +151,11 @@ export const api = createApi({
     getMyAppointments: build.query<Appointment[], void>({
       query: () => '/portal/appointments',
     }),
+    // The doctor's saved assistant conversation; the assistant slice owns it once loaded.
+    getAssistantConversation: build.query<AssistantMessage[], void>({
+      query: () => '/assistant/messages',
+      keepUnusedDataFor: 0,
+    }),
     getMyMessages: build.query<Message[], void>({
       query: () => '/portal/messages',
       providesTags: [{ type: 'Message', id: 'MINE' }],
@@ -151,7 +164,7 @@ export const api = createApi({
       query: (body) => ({ url: '/portal/messages', method: 'POST', body: { body } }),
       onQueryStarted: async (_body, { dispatch, queryFulfilled }) => {
         const { data } = await queryFulfilled.catch(() => ({ data: null }))
-        if (data) dispatch(api.util.updateQueryData('getMyMessages', undefined, (draft) => void draft.push(data)))
+        if (data) dispatch(api.util.updateQueryData('getMyMessages', undefined, (draft) => addMessage(draft, data)))
       },
     }),
   }),
@@ -173,5 +186,6 @@ export const {
   useGetMyGlucoseQuery,
   useGetMyAppointmentsQuery,
   useGetMyMessagesQuery,
+  useGetAssistantConversationQuery,
   useSendMyMessageMutation,
 } = api

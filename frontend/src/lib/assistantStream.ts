@@ -1,5 +1,3 @@
-import type { AssistantMessage } from '../types'
-
 export type AssistantEvent =
   | { type: 'thinking' | 'text'; text: string }
   | { type: 'tool'; name: string; label: string }
@@ -14,9 +12,9 @@ export class AssistantRequestError extends Error {
   }
 }
 
-/** POSTs the conversation and calls onEvent for each server-sent event until the stream ends. */
+/** POSTs the doctor's next question (the server holds the conversation) and calls onEvent for each server-sent event until the stream ends. */
 export async function streamAssistant(
-  messages: AssistantMessage[],
+  question: string,
   token: string | null,
   onEvent: (event: AssistantEvent) => void,
   signal: AbortSignal,
@@ -24,7 +22,7 @@ export async function streamAssistant(
   const res = await fetch(`${import.meta.env.VITE_API_URL ?? ''}/api/assistant/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ messages: messages.map(({ role, content }) => ({ role, content })) }),
+    body: JSON.stringify({ message: question }),
     signal,
   })
   // Limits and auth are checked before streaming starts, so they arrive as normal JSON errors.

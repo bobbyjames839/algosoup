@@ -6,9 +6,11 @@ import { loggedIn, loggedOut, patientLoggedIn } from './authSlice'
 
 interface AssistantState {
   messages: AssistantMessage[]
+  // Whether the saved conversation has been fetched from the server yet.
+  loaded: boolean
 }
 
-const initialState: AssistantState = { messages: [] }
+const initialState: AssistantState = { messages: [], loaded: false }
 
 // The reply currently being streamed, if any: always the last message.
 const streamingReply = (state: AssistantState) => {
@@ -20,6 +22,10 @@ const assistantSlice = createSlice({
   name: 'assistant',
   initialState,
   reducers: {
+    conversationLoaded(state, action: PayloadAction<AssistantMessage[]>) {
+      state.messages = action.payload
+      state.loaded = true
+    },
     questionAsked(state, action: PayloadAction<string>) {
       state.messages.push({ role: 'user', content: action.payload }, { role: 'assistant', content: '', reasoning: '', steps: [], streaming: true })
     },
@@ -47,5 +53,5 @@ const assistantSlice = createSlice({
   extraReducers: (builder) => builder.addMatcher(isAnyOf(loggedIn, patientLoggedIn, loggedOut), () => initialState),
 })
 
-export const { questionAsked, replyEvent, replyFinished, questionFailed } = assistantSlice.actions
+export const { conversationLoaded, questionAsked, replyEvent, replyFinished, questionFailed } = assistantSlice.actions
 export default assistantSlice.reducer

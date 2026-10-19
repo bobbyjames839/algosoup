@@ -1,7 +1,7 @@
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 
 class LoginRequest(BaseModel):
@@ -73,12 +73,6 @@ class PatientMessageCreate(MessageCreate):
     patient_id: str
 
 
-class AssistantMessage(BaseModel):
-    role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=4000)
-
-
 class AssistantChatRequest(BaseModel):
-    # Full conversation so far, oldest first; must end with the doctor's new question.
-    # Only the most recent turns are sent to the model (see assistant.HISTORY_LIMIT).
-    messages: list[AssistantMessage] = Field(min_length=1, max_length=100)
+    # Just the new question: the conversation itself is stored server-side (assistant_messages).
+    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]

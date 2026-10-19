@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { Message } from '../types'
-import { api } from './api'
+import { addMessage, api } from './api'
 import { useAppDispatch, useAppSelector } from './hooks'
 import type { AppDispatch } from './index'
 
@@ -17,9 +17,7 @@ function applyForDoctor(dispatch: AppDispatch, message: Message) {
     // Refetches the thread only if it's open, and fetching a thread marks it read on the server.
     dispatch(api.util.invalidateTags([{ type: 'Message', id: message.patient_id }]))
   } else {
-    dispatch(api.util.updateQueryData('getThread', message.patient_id, (draft) => {
-      if (!draft.some((m) => m.id === message.id)) draft.push(message)
-    }))
+    dispatch(api.util.updateQueryData('getThread', message.patient_id, (draft) => addMessage(draft, message)))
   }
 
   let inInbox = false
@@ -42,9 +40,7 @@ function applyForDoctor(dispatch: AppDispatch, message: Message) {
 }
 
 function applyForPatient(dispatch: AppDispatch, message: Message) {
-  dispatch(api.util.updateQueryData('getMyMessages', undefined, (draft) => {
-    if (!draft.some((m) => m.id === message.id)) draft.push(message)
-  }))
+  dispatch(api.util.updateQueryData('getMyMessages', undefined, (draft) => addMessage(draft, message)))
 }
 
 /** Keeps a WebSocket open while signed in and applies new messages to the cached inbox and threads as they arrive. */

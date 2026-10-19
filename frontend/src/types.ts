@@ -95,11 +95,14 @@ export interface MessageThread {
   unread: number
 }
 
+// One message in the doctor's continuous assistant conversation (stored server-side).
 export interface AssistantMessage {
+  id?: string
   role: 'user' | 'assistant'
   content: string
-  // Display-only, never sent back to the API.
-  reasoning?: string
+  reasoning?: string | null
   steps?: string[]
+  created_at?: string
+  // Set on the reply currently being streamed.
   streaming?: boolean
 }

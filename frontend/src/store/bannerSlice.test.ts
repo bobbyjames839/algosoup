@@ -25,7 +25,6 @@ const fulfilled = (endpointName: string, type: 'query' | 'mutation') => ({
 
 describe('banner middleware', () => {
   it.each([
-    ['login', { status: 401 }, 'Invalid username or password.'],
     ['getPatients', { status: 401 }, 'Your session has expired. Please sign in again.'],
     ['getPatients', { status: 'FETCH_ERROR', error: 'TypeError' }, 'Unable to reach the server. Check your connection.'],
     ['getPatient', { status: 404, data: { detail: 'Patient not found' } }, 'Patient not found'],
@@ -35,6 +34,12 @@ describe('banner middleware', () => {
     const store = makeStore()
     store.dispatch(rejected(endpoint, error))
     expect(store.getState().banner).toMatchObject({ tone: 'error', message })
+  })
+
+  it.each(['login', 'patientLogin'])('leaves %s errors to the login form (no banner)', (endpoint) => {
+    const store = makeStore()
+    store.dispatch(rejected(endpoint, { status: 401 }))
+    expect(store.getState().banner.message).toBeNull()
   })
 
   it('shows a success banner for known mutations only', () => {
