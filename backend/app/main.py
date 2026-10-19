@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from .config import CORS_ORIGINS
 from .routers import appointments, auth, messages, patients
@@ -22,3 +25,18 @@ app.include_router(messages.router)
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+# In production the built frontend is served from here; unknown paths fall back to index.html for client-side routing.
+DIST_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+if DIST_DIR.is_dir():
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def frontend(path: str):
+        if path.startswith("api/"):
+            raise HTTPException(status_code=404)
+        file = (DIST_DIR / path).resolve()
+        if file.is_file() and file.is_relative_to(DIST_DIR):
+            return FileResponse(file)
+        return FileResponse(DIST_DIR / "index.html")
